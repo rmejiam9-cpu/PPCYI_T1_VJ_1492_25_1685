@@ -1,0 +1,208 @@
+# RUDY ROLANDO MEJIA MARROQUIN
+# PROGRAMA EN CONSOLA TAREA 1
+
+
+import os
+import sys
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass
+from typing import List, Dict, Optional
+
+
+# -----------------------------
+# Modelo de dominio
+# -----------------------------
+@dataclass
+class Vuelo:
+    codigo: str
+    origen: str
+    destino: str
+    duracion: int  # en horas (según enunciado)
+    aerolinea: str
+
+    def __str__(self) -> str:
+        return (f"[{self.codigo}] {self.origen} → {self.destino} | "
+                f"Duración: {self.duracion}h | Aerolínea: {self.aerolinea}")
+
+
+# -----------------------------
+# Capa de acceso / parsing XML
+# -----------------------------
+def cargar_archivo(ruta: str) -> List[Vuelo]:
+    """
+    Lee el archivo XML con estructura:
+    <registroVuelos>
+        <vuelo>
+            <codigo>...</codigo>
+            <origen>...</origen>
+            <destino>...</destino>
+            <duracion>...</duracion>
+            <aerolinea>...</aerolinea>
+        </vuelo>
+        ...
+    </registroVuelos>
+    """
+    if not os.path.isfile(ruta):
+        raise FileNotFoundError(f"No existe el archivo: {ruta}")
+
+    try:
+        tree = ET.parse(ruta)
+        root = tree.getroot()
+    except ET.ParseError as e:
+        raise ValueError(f"El XML está mal formado: {e}")
+
+    vuelos: List[Vuelo] = []
+
+    # Validar etiqueta raíz
+    if root.tag != "registroVuelos":
+        raise ValueError("XML inválido: la raíz debe ser <registroVuelos>.")
+
+    for nodo_vuelo in root.findall("vuelo"):
+        try:
+            codigo = _texto_obligatorio(nodo_vuelo, "codigo")
+            origen = _texto_obligatorio(nodo_vuelo, "origen")
+            destino = _texto_obligatorio(nodo_vuelo, "destino")
+            duracion_txt = _texto_obligatorio(nodo_vuelo, "duracion")
+            aerolinea = _texto_obligatorio(nodo_vuelo, "aerolinea")
+
+            duracion = int(duracion_txt)  # convierte a entero
+            vuelos.append(Vuelo(codigo, origen, destino, duracion, aerolinea))
+        except ValueError as e:
+            # Si un vuelo viene mal, lo informamos y continuamos.
+            print(f"Advertencia: registro de vuelo ignorado por error -> {e}")
+
+    return vuelos
+
+
+def _texto_obligatorio(nodo: ET.Element, etiqueta: str) -> str:
+    hijo = nodo.find(etiqueta)
+    if hijo is None or hijo.text is None or not hijo.text.strip():
+        raise ValueError(f"Falta la etiqueta obligatoria <{etiqueta}>.")
+    return hijo.text.strip()
+
+
+# -----------------------------
+# Servicios (lógica de negocio)
+# -----------------------------
+def buscar_vuelo_por_codigo(vuelos: List[Vuelo], codigo: str) -> Optional[Vuelo]:
+    codigo = codigo.strip().upper()
+    for v in vuelos:
+        if v.codigo.strip().upper() == codigo:
+            return v
+    return None
+
+
+def agrupar_por_aerolinea(vuelos: List[Vuelo]) -> Dict[str, List[Vuelo]]:
+    grupos: Dict[str, List[Vuelo]] = {}
+    for v in vuelos:
+        grupos.setdefault(v.aerolinea, []).append(v)
+    return grupos
+
+
+def ordenar_por_duracion_desc(vuelos: List[Vuelo]) -> List[Vuelo]:
+    # mayor a menor duración
+    return sorted(vuelos, key=lambda x: x.duracion, reverse=True)
+
+
+# -----------------------------
+# Presentación (menú de consola)
+# -----------------------------
+def limpiar_consola() -> None:
+    os.system("cls" if os.name == "nt" else "clear")
+
+
+def pausar() -> None:
+    input("\nPresione ENTER para continuar...")
+
+
+def mostrar_menu() -> None:
+    print("-------- MENÚ AEROLÍNEA --------")
+    print("1. Cargar Archivo")
+    print("2. Detalle de vuelo específico")
+    print("3. Agrupar vuelos por aerolínea")
+    print("4. Ordenar más duración a menor duración")
+    print("5. Salir")
+    print("---------------------------------")
+
+
+def main() -> None:
+    vuelos: List[Vuelo] = []
+    archivo_cargado: Optional[str] = None
+
+    while True:
+        limpiar_consola()
+        mostrar_menu()
+
+        if archivo_cargado:
+            print(f"\nArchivo cargado: {archivo_cargado} | Vuelos en memoria: {len(vuelos)}")
+
+        opcion = input("\nSeleccione una opción (1-5): ").strip()
+
+        # Opción 1: Cargar Archivo
+        if opcion == "1":
+            print("\n== Cargar archivo XML ==")
+            ruta = input("Ruta del XML (ENTER para 'vuelos.xml'): ").strip()
+            if not ruta:
+                ruta = "vuelos.xml"
+            try:
+                vuelos = cargar_archivo(ruta)
+                archivo_cargado = ruta
+                print(f"\nSe cargaron {len(vuelos)} vuelos desde '{ruta}'.")
+            except (FileNotFoundError, ValueError) as e:
+                print(f"\nError: {e}")
+            pausar()
+
+        # Opción 2: Detalle de vuelo específico
+        elif opcion == "2":
+            if not vuelos:
+                print("\nPrimero debe cargar un archivo (opción 1).")
+            else:
+                codigo = input("Ingrese el código del vuelo (ej. AV123): ")
+                v = buscar_vuelo_por_codigo(vuelos, codigo)
+                if v:
+                    print("\nDetalle del vuelo:")
+                    print(v)
+                else:
+                    print("\nNo se encontró un vuelo con ese código.")
+            pausar()
+
+        # Opción 3: Agrupar por aerolínea
+        elif opcion == "3":
+            if not vuelos:
+                print("\nPrimero debe cargar un archivo (opción 1).")
+            else:
+                grupos = agrupar_por_aerolinea(vuelos)
+                print("\nVuelos agrupados por aerolínea:")
+                for aerolinea, lista in grupos.items():
+                    print(f"\n- {aerolinea} ({len(lista)})")
+                    for v in lista:
+                        print(f"  • {v.codigo}: {v.origen} → {v.destino} ({v.duracion}h)")
+            pausar()
+
+        # Opción 4: Ordenar por duración (mayor→menor)
+        elif opcion == "4":
+            if not vuelos:
+                print("\nPrimero debe cargar un archivo (opción 1).")
+            else:
+                ordenados = ordenar_por_duracion_desc(vuelos)
+                print("\nCódigos de vuelos ordenados por duración (mayor→menor):\n")
+                for v in ordenados:
+                    print(f"{v.codigo} ({v.duracion}h)")
+            pausar()
+
+        # Salir
+        elif opcion == "5":
+            print("\n¡Gracias por usar el sistema! 👋")
+            break
+
+        else:
+            print("\nOpción inválida. Intenta de nuevo.")
+            pausar()
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n\nPrograma interrumpido por el usuario.")
+        sys.exit(0)
