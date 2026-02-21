@@ -7,8 +7,6 @@ https://youtu.be/qsfAcONc4mE
 
 DIAGRAMA DE CLASES
 
-```mermaid
-
 
 %% =====================
 %% Modelo de dominio
